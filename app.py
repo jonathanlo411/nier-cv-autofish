@@ -10,9 +10,60 @@ from lib.logging import FishingLogger
 # ============================================================
 #  CONFIGURATION
 # ============================================================
-MONITOR = {
+
+# The region below was originally tuned by hand on a 2560x1440 display.
+# We treat that as the "reference" resolution and scale the capture
+# region proportionally for whatever the user's actual monitor is.
+REFERENCE_RESOLUTION = (2560, 1440)
+REFERENCE_REGION = {
     "top": 520, "left": 1080, "width": 400, "height": 400
 }
+MONITOR_INDEX = 1  # mss index: 0 = all monitors combined, 1 = primary, 2 = secondary, etc.
+
+
+def get_scaled_monitor(monitor_index=MONITOR_INDEX,
+                        reference_resolution=REFERENCE_RESOLUTION,
+                        reference_region=REFERENCE_REGION):
+    """
+    Detect the real monitor resolution and scale the hand-tuned capture
+    region to match it, so the bot doesn't need per-user manual tweaking.
+
+    Returns (monitor_dict, scale_x, scale_y).
+    """
+    with mss.mss() as sct:
+        if monitor_index >= len(sct.monitors):
+            print(f"  [WARN] Monitor index {monitor_index} not found, falling back to primary (1).")
+            monitor_index = 1
+        screen = sct.monitors[monitor_index]
+
+    screen_width = screen["width"]
+    screen_height = screen["height"]
+    ref_width, ref_height = reference_resolution
+
+    scale_x = screen_width / ref_width
+    scale_y = screen_height / ref_height
+
+    scaled = {
+        "top": screen["top"] + int(reference_region["top"] * scale_y),
+        "left": screen["left"] + int(reference_region["left"] * scale_x),
+        "width": int(reference_region["width"] * scale_x),
+        "height": int(reference_region["height"] * scale_y),
+    }
+
+    print(f"  [MONITOR] Detected {screen_width}x{screen_height} "
+          f"(scale x={scale_x:.3f}, y={scale_y:.3f})")
+    print(f"  [MONITOR] Scaled capture region: {scaled}")
+
+    return scaled, scale_x, scale_y
+
+
+MONITOR, SCALE_X, SCALE_Y = get_scaled_monitor()
+
+# Average scale factor, used for anything that should stay roughly
+# square/proportional (like the detector's crop size) rather than
+# stretched independently on each axis.
+SCALE_AVG = (SCALE_X + SCALE_Y) / 2
+
 LOOK_DOWN_DURATION = 0.5
 LOOK_DOWN_SPEED = 250
 WAIT_AFTER_CAMERA = 0.3
@@ -21,7 +72,7 @@ RESET_UP_DURATION = 0.5
 RESET_UP_SPEED = 250
 RESET_DELAY_AFTER_REEL = 0.5
 REEL_DURATION = 10.0
-CROP_SIZE = 200
+CROP_SIZE = int(200 * SCALE_AVG)
 FPS_TARGET = 120
 DISPLAY_WINDOW = True
 CATCH_TIMEOUT = 45.0
