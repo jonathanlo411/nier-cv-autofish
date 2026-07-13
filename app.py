@@ -1,80 +1,10 @@
 import time
-import ctypes
-from ctypes import wintypes
 import mss
 import numpy as np
 import cv2
 from pynput.keyboard import Key, Controller as KeyboardController
-from pynput.mouse import Button, Controller as MouseController
 from bite_detector import BiteDetector
-
-# ============================================================
-#  DIRECTINPUT – keybd_event (verified working in test)
-# ============================================================
-
-VK_RETURN = 0x0D
-SCANCODE_ENTER = 0x1C
-KEYEVENTF_KEYUP = 0x0002
-
-# Mouse movement constants
-INPUT_MOUSE = 0
-MOUSEEVENTF_MOVE = 0x0001
-
-class MOUSEINPUT(ctypes.Structure):
-    _fields_ = [
-        ("dx", wintypes.LONG),
-        ("dy", wintypes.LONG),
-        ("mouseData", wintypes.DWORD),
-        ("dwFlags", wintypes.DWORD),
-        ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
-    ]
-
-class KEYBDINPUT(ctypes.Structure):
-    _fields_ = [
-        ("wVk", wintypes.WORD),
-        ("wScan", wintypes.WORD),
-        ("dwFlags", wintypes.DWORD),
-        ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
-    ]
-
-class MOUSE_INPUT_UNION(ctypes.Union):
-    _fields_ = [
-        ("mi", MOUSEINPUT),
-        ("ki", KEYBDINPUT),
-    ]
-
-class MOUSE_INPUT(ctypes.Structure):
-    _fields_ = [
-        ("type", wintypes.DWORD),
-        ("u", MOUSE_INPUT_UNION),
-    ]
-
-def press_enter():
-    """
-    Press and release ENTER using keybd_event.
-    EXACT same code that worked in your test.
-    """
-    # Press
-    ctypes.windll.user32.keybd_event(VK_RETURN, SCANCODE_ENTER, 0, 0)
-    time.sleep(0.15)
-    # Release
-    ctypes.windll.user32.keybd_event(VK_RETURN, SCANCODE_ENTER, KEYEVENTF_KEYUP, 0)
-    time.sleep(0.05)
-
-def send_mouse_move(dx, dy):
-    """Send relative mouse movement using SendInput."""
-    inp = MOUSE_INPUT()
-    inp.type = INPUT_MOUSE
-    inp.u.mi.dx = dx
-    inp.u.mi.dy = dy
-    inp.u.mi.mouseData = 0
-    inp.u.mi.dwFlags = MOUSEEVENTF_MOVE
-    inp.u.mi.time = 0
-    inp.u.mi.dwExtraInfo = ctypes.pointer(ctypes.c_ulong(0))
-
-    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+from controls import look_down_camera, cast_line, reel_in
 
 # ============================================================
 #  CONFIGURATION
@@ -84,8 +14,11 @@ MONITOR = {
 }
 LOOK_DOWN_DURATION = 0.5
 LOOK_DOWN_SPEED = 250
-WAIT_AFTER_CAMERA = 0.5
+WAIT_AFTER_CAMERA = 0.3
 WAIT_AFTER_CAST = 1.5
+RESET_UP_DURATION = 0.5
+RESET_UP_SPEED = 250
+RESET_DELAY_AFTER_REEL = 0.5
 REEL_DURATION = 10.0
 CROP_SIZE = 200
 FPS_TARGET = 120
@@ -102,38 +35,18 @@ DETECTOR_PARAMS = {
 }
 # ============================================================
 
-def look_down_camera():
-    """Step 1: Move the camera downward."""
-    print("  [1/5] Moving camera down...")
-    steps = 30
-    delay = LOOK_DOWN_DURATION / steps
-    move_per_step = int(LOOK_DOWN_SPEED * delay)
-    
-    for i in range(steps):
-        send_mouse_move(0, move_per_step)
-        time.sleep(delay)
-    
-    print(f"  [1/5] Camera moved down ({LOOK_DOWN_DURATION}s)")
-    time.sleep(WAIT_AFTER_CAMERA)
-
-def cast_line():
-    """Step 2: Cast the fishing line by pressing ENTER."""
-    print("  [2/5] Casting line (ENTER)...")
-    press_enter()
-    print("  [2/5] Line cast! Waiting for lure to land...")
-    time.sleep(WAIT_AFTER_CAST)
-
 def start_detector():
     """Step 3: Initialize the bite detector."""
-    print("  [3/5] Starting detector...")
+    print("  [DETECTOR] Starting detector...")
     detector = BiteDetector(**DETECTOR_PARAMS)
     warmup_time = DETECTOR_PARAMS["history"] / FPS_TARGET
-    print(f"  [3/5] Detector warming up (~{warmup_time:.1f}s)...")
+    print(f"  [DETECTOR] Warming up (~{warmup_time:.1f}s)...")
     return detector
+
 
 def wait_for_bite(detector, sct, running_flag):
     """Step 4: Monitor for a bite."""
-    print("  [4/5] Waiting for bite...")
+    print("  [DETECTOR] Waiting for bite...")
     
     bite_detected = False
     last_capture_time = time.time()
@@ -207,52 +120,39 @@ def wait_for_bite(detector, sct, running_flag):
             time.sleep(sleep_time)
         last_capture_time = time.time()
     
-    print("  [4/5] BITE DETECTED!")
+    print("  [DETECTOR] BITE DETECTED!")
     return True
 
-def reel_in():
-    """Step 4b: Reel in the fish."""
-    print("  [REEL] Reeling in (ENTER)...")
-    press_enter()
-    print(f"  [REEL] Waiting {REEL_DURATION}s for animation...")
-    time.sleep(REEL_DURATION)
-    print("  [REEL] Done!")
 
 def main():
     print("=" * 60)
     print("  Nier: Automata Fishing Bot")
     print("=" * 60)
-    print(f"  Resolution: {MONITOR['width']}x{MONITOR['height']}")
-    print(f"  Capture: {FPS_TARGET} FPS")
+    print(f"  Monitor capture: {MONITOR['width']}x{MONITOR['height']} at ({MONITOR['left']},{MONITOR['top']})")
+    print(f"  Capture target: {FPS_TARGET} FPS")
     print(f"  Cast/Reel key: ENTER (keybd_event)")
-    print(f"  Look-down speed: {LOOK_DOWN_SPEED}")
+    print(f"  Look-down: speed={LOOK_DOWN_SPEED}, duration={LOOK_DOWN_DURATION}s")
+    print(f"  Reset-up: speed={RESET_UP_SPEED}, duration={RESET_UP_DURATION}s")
+    print(f"  Reset delay after reel: {RESET_DELAY_AFTER_REEL}s")
+    print(f"  Reel duration: {REEL_DURATION}s")
     print(f"  Crop size: {CROP_SIZE}px")
     print("=" * 60)
-    print("  INSTRUCTIONS:")
-    print("  1. Go to a fishing spot")
-    print("  2. Enter fishing mode and face the water")
-    print("  3. Make sure game window is FOCUSED")
-    print("  4. Press F1 to START the bot")
-    print("  5. Press F1 again to STOP")
-    print("  6. Press 'q' on overlay window to quit")
+    print("  CYCLE FLOW:")
+    print("  Look Down -> Cast -> Detect Bite -> Reel In ->")
+    print("  Wait 0.5s -> Reset Up (during animation) ->")
+    print("  Animation ends -> Game resets to neutral -> Repeat")
     print("=" * 60)
 
     sct = mss.mss()
     running = [False]
 
-    # ---------- Hotkey listener (F1 toggles) ----------
+    # Hotkey listener (F1 toggles)
     def on_press(key):
         try:
             if key == Key.f1:
                 running[0] = not running[0]
-                if running[0]:
-                    print("\n" + "=" * 60)
-                    print(">>> Bot STARTED")
-                    print("=" * 60)
-                else:
-                    print("\n" + "=" * 60)
-                    print(">>> Bot STOPPED")
-                    print("=" * 60)
+                state_str = "STARTED" if running[0] else "STOPPED"
+                print(f"\n>>> Bot {state_str}")
         except AttributeError:
             pass
 
@@ -260,10 +160,10 @@ def main():
     listener = kb.Listener(on_press=on_press)
     listener.start()
 
-    # ---------- OpenCV overlay window ----------
+    # Overlay window
     if DISPLAY_WINDOW:
         cv2.namedWindow("Nier Fishing Bot", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Nier Fishing Bot", 1280, 720)
+        cv2.resizeWindow("Nier Fishing Bot", 400, 400)
         print("  Overlay window created.")
 
     try:
@@ -282,30 +182,26 @@ def main():
             print(f"  FISHING CYCLE #{cycle_count}")
             print(f"{'='*60}")
             
-            # Step 1: Move camera down
-            look_down_camera()
+            # Step 1: Look down
+            look_down_camera(LOOK_DOWN_DURATION, LOOK_DOWN_SPEED, WAIT_AFTER_CAMERA)
             
-            # Step 2: Cast the line
-            cast_line()
+            # Step 2: Cast
+            cast_line(WAIT_AFTER_CAST)
             
-            # Step 3: Start the bite detector
+            # Step 3: Start detector
             detector = start_detector()
             
             # Step 4: Wait for bite
             bite_found = wait_for_bite(detector, sct, running)
             
             if not bite_found:
-                if not running[0]:
-                    print("  [QUIT] Bot stopped by user.")
-                else:
-                    print("  [QUIT] Detection stopped.")
+                print("  [QUIT] Detection stopped.")
                 break
             
-            # Step 4b: Reel in
-            reel_in()
+            # Step 5: Reel in and reset camera during animation
+            reel_in(RESET_DELAY_AFTER_REEL, RESET_UP_DURATION, RESET_UP_SPEED, REEL_DURATION)
             
             print(f"  [DONE] Cycle #{cycle_count} complete!")
-            print(f"  [NEXT] Preparing for next cast...")
 
     except KeyboardInterrupt:
         print("\n\nBot interrupted by user.")
@@ -314,6 +210,7 @@ def main():
         if DISPLAY_WINDOW:
             cv2.destroyAllWindows()
         print("\nBot terminated.")
+
 
 if __name__ == "__main__":
     main()
