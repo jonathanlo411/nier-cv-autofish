@@ -9,7 +9,7 @@ videos = sorted([f for f in os.listdir(DATA_DIR) if f.lower().endswith(".mp4")])
 if not videos:
     raise RuntimeError("No MP4 files found in ./data")
 
-video_path = os.path.join(DATA_DIR, videos[0])
+video_path = os.path.join(DATA_DIR, videos[1])
 cap = cv2.VideoCapture(video_path)
 
 frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
