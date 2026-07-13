@@ -1,5 +1,6 @@
 # NieR Comptuer Vision Autofisher
-
+<a href="https://github.com/jonathanlo411/nier-cv-autofish/releases"><img src="https://img.shields.io/github/v/release/jonathanlo411/nier-cv-autofish?color=f56827"></a>
+<a href="https://github.com/jonathanlo411/nier-cv-autofish/blob/main/LICENSE"><img src="https://img.shields.io/github/license/jonathanlo411/nier-cv-autofish"></a>
 
 This program uses computer vision to automatically fish in NieR:Automata. It is completely standalone and will work without needing to modify game volume, sound, or graphics as other autofishers tend to require.
 
