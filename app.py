@@ -2,9 +2,10 @@ import time
 import mss
 import numpy as np
 import cv2
-from pynput.keyboard import Key, Controller as KeyboardController
+from pynput.keyboard import Key
 from lib.bite_detector import BiteDetector
-from lib.controls import look_down_camera, cast_line, reel_in
+from lib.controls import look_down_camera, cast_line, reel_in, reset_camera_up
+from lib.logging import FishingLogger
 
 # ============================================================
 #  CONFIGURATION
@@ -23,6 +24,7 @@ REEL_DURATION = 10.0
 CROP_SIZE = 200
 FPS_TARGET = 120
 DISPLAY_WINDOW = True
+CATCH_TIMEOUT = 45.0
 
 DETECTOR_PARAMS = {
     "crop_size": CROP_SIZE,
@@ -33,6 +35,30 @@ DETECTOR_PARAMS = {
     "min_spike_sec": 0.1,
     "cooldown_sec": 3.0,
 }
+
+# Build config dict for logger
+CONFIG = {
+    "monitor_width": MONITOR["width"],
+    "monitor_height": MONITOR["height"],
+    "monitor_left": MONITOR["left"],
+    "monitor_top": MONITOR["top"],
+    "fps_target": FPS_TARGET,
+    "crop_size": CROP_SIZE,
+    "spike_z_thresh": DETECTOR_PARAMS["spike_z_thresh"],
+    "min_spike_sec": DETECTOR_PARAMS["min_spike_sec"],
+    "baseline_window_sec": DETECTOR_PARAMS["baseline_window_sec"],
+    "cooldown_sec": DETECTOR_PARAMS["cooldown_sec"],
+    "history": DETECTOR_PARAMS["history"],
+    "var_threshold": DETECTOR_PARAMS["var_threshold"],
+    "catch_timeout": CATCH_TIMEOUT,
+    "look_down_duration": LOOK_DOWN_DURATION,
+    "look_down_speed": LOOK_DOWN_SPEED,
+    "reset_up_duration": RESET_UP_DURATION,
+    "reset_up_speed": RESET_UP_SPEED,
+}
+
+# ============================================================
+#  DETECTOR
 # ============================================================
 
 def start_detector():
@@ -44,8 +70,8 @@ def start_detector():
     return detector
 
 
-def wait_for_bite(detector, sct, running_flag):
-    """Step 4: Monitor for a bite."""
+def wait_for_bite(detector, sct, running_flag, logger):
+    """Step 4: Monitor for a bite with timeout."""
     print("  [DETECTOR] Waiting for bite...")
     
     bite_detected = False
@@ -53,10 +79,18 @@ def wait_for_bite(detector, sct, running_flag):
     banner_until = 0.0
     frame_interval = 1.0 / FPS_TARGET
     frame_count = 0
+    detection_start = time.time()
     
     while not bite_detected:
         if not running_flag[0]:
-            return False
+            return False, None
+        
+        # Check for timeout
+        elapsed_total = time.time() - detection_start
+        if elapsed_total > CATCH_TIMEOUT:
+            print(f"  [DETECTOR] TIMEOUT after {CATCH_TIMEOUT}s - no bite detected")
+            cycle_data = logger.log_timeout()
+            return True, cycle_data
         
         # Capture screen
         img = np.array(sct.grab(MONITOR))
@@ -66,12 +100,16 @@ def wait_for_bite(detector, sct, running_flag):
         bite_detected = detector.process_frame(frame, timestamp=now)
         frame_count += 1
         
+        # Log frame metrics
+        logger.log_frame(detector.last_fg_count, detector.last_z)
+        
         # Print status periodically
         if frame_count % 60 == 0:
             state = detector.last_state
             z = detector.last_z
             z_str = f"{z:.1f}" if z is not None else "n/a"
-            print(f"    [WAITING] frame={frame_count} fg={detector.last_fg_count} z={z_str} state={state}")
+            remaining = CATCH_TIMEOUT - elapsed_total
+            print(f"    [WAITING] frame={frame_count} fg={detector.last_fg_count} z={z_str} state={state} timeout={remaining:.0f}s")
         
         # Visual overlay
         if DISPLAY_WINDOW:
@@ -86,32 +124,35 @@ def wait_for_bite(detector, sct, running_flag):
             state = detector.last_state
             z_text = f"{z:.1f}" if z is not None else "n/a"
             
-            # Semi-transparent background for text
             overlay = vis.copy()
-            cv2.rectangle(overlay, (5, 5), (400, 130), (0, 0, 0), -1)
+            cv2.rectangle(overlay, (5, 5), (400, 150), (0, 0, 0), -1)
             cv2.addWeighted(overlay, 0.6, vis, 0.4, 0, vis)
-            cv2.rectangle(vis, (5, 5), (400, 130), (100, 100, 100), 1)
+            cv2.rectangle(vis, (5, 5), (400, 150), (100, 100, 100), 1)
             
             cv2.putText(vis, f"fg={fg} z={z_text} state={state}",
                         (15, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             cv2.putText(vis, f"FPS: {FPS_TARGET} | Crop: {CROP_SIZE}px | Frame: {frame_count}",
                         (15, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
-            cv2.putText(vis, f"Key: ENTER | Speed: {LOOK_DOWN_SPEED}",
+            cv2.putText(vis, f"Catches: {logger.total_catches} | Timeout: {CATCH_TIMEOUT - elapsed_total:.0f}s",
                         (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
             
             if bite_detected:
                 banner_until = now + 3.0
             if now < banner_until:
-                cv2.rectangle(vis, (5, 95), (400, 140), (0, 0, 200), -1)
-                cv2.putText(vis, "!!! BITE DETECTED !!!", (20, 125),
+                cv2.rectangle(vis, (5, 100), (400, 150), (0, 0, 200), -1)
+                cv2.putText(vis, "!!! BITE DETECTED !!!", (20, 135),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+            elif elapsed_total > CATCH_TIMEOUT - 5:
+                cv2.rectangle(vis, (5, 100), (400, 150), (0, 100, 200), -1)
+                cv2.putText(vis, f"TIMEOUT SOON: {CATCH_TIMEOUT - elapsed_total:.0f}s", (20, 135),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
             
             cv2.imshow("Nier Fishing Bot", vis)
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
-                return False
+                return False, None
             if cv2.getWindowProperty("Nier Fishing Bot", cv2.WND_PROP_VISIBLE) < 1:
-                return False
+                return False, None
         
         # Maintain target frame rate
         elapsed = time.time() - last_capture_time
@@ -120,33 +161,33 @@ def wait_for_bite(detector, sct, running_flag):
             time.sleep(sleep_time)
         last_capture_time = time.time()
     
-    print("  [DETECTOR] BITE DETECTED!")
-    return True
+    trigger_z = detector.last_z if detector.last_z is not None else 0
+    cycle_data = logger.log_bite(trigger_z)
+    
+    print(f"  [DETECTOR] BITE DETECTED! (time={cycle_data['catch_time']:.1f}s, z={trigger_z:.1f})")
+    return True, cycle_data
 
+
+# ============================================================
+#  MAIN
+# ============================================================
 
 def main():
     print("=" * 60)
     print("  Nier: Automata Fishing Bot")
     print("=" * 60)
-    print(f"  Monitor capture: {MONITOR['width']}x{MONITOR['height']} at ({MONITOR['left']},{MONITOR['top']})")
-    print(f"  Capture target: {FPS_TARGET} FPS")
-    print(f"  Cast/Reel key: ENTER (keybd_event)")
-    print(f"  Look-down: speed={LOOK_DOWN_SPEED}, duration={LOOK_DOWN_DURATION}s")
-    print(f"  Reset-up: speed={RESET_UP_SPEED}, duration={RESET_UP_DURATION}s")
-    print(f"  Reset delay after reel: {RESET_DELAY_AFTER_REEL}s")
-    print(f"  Reel duration: {REEL_DURATION}s")
-    print(f"  Crop size: {CROP_SIZE}px")
-    print("=" * 60)
-    print("  CYCLE FLOW:")
-    print("  Look Down -> Cast -> Detect Bite -> Reel In ->")
-    print("  Wait 0.5s -> Reset Up (during animation) ->")
-    print("  Animation ends -> Game resets to neutral -> Repeat")
+    print(f"  Monitor: {MONITOR['width']}x{MONITOR['height']} at ({MONITOR['left']},{MONITOR['top']})")
+    print(f"  FPS Target: {FPS_TARGET}")
+    print(f"  Crop: {CROP_SIZE}px | Timeout: {CATCH_TIMEOUT}s")
+    print(f"  Log: logs/autofishing-<datetime>.log")
     print("=" * 60)
 
     sct = mss.mss()
     running = [False]
+    logger = FishingLogger(CONFIG)
+    
+    print(f"  Logging to: {logger.filepath}")
 
-    # Hotkey listener (F1 toggles)
     def on_press(key):
         try:
             if key == Key.f1:
@@ -160,11 +201,9 @@ def main():
     listener = kb.Listener(on_press=on_press)
     listener.start()
 
-    # Overlay window
     if DISPLAY_WINDOW:
         cv2.namedWindow("Nier Fishing Bot", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Nier Fishing Bot", 400, 400)
-        print("  Overlay window created.")
 
     try:
         cycle_count = 0
@@ -172,9 +211,8 @@ def main():
         while True:
             if not running[0]:
                 time.sleep(0.1)
-                if DISPLAY_WINDOW:
-                    if cv2.getWindowProperty("Nier Fishing Bot", cv2.WND_PROP_VISIBLE) < 1:
-                        break
+                if DISPLAY_WINDOW and cv2.getWindowProperty("Nier Fishing Bot", cv2.WND_PROP_VISIBLE) < 1:
+                    break
                 continue
 
             cycle_count += 1
@@ -182,30 +220,29 @@ def main():
             print(f"  FISHING CYCLE #{cycle_count}")
             print(f"{'='*60}")
             
-            # Step 1: Look down
             look_down_camera(LOOK_DOWN_DURATION, LOOK_DOWN_SPEED, WAIT_AFTER_CAMERA)
-            
-            # Step 2: Cast
             cast_line(WAIT_AFTER_CAST)
             
-            # Step 3: Start detector
             detector = start_detector()
+            logger.start_cycle()
             
-            # Step 4: Wait for bite
-            bite_found = wait_for_bite(detector, sct, running)
+            bite_found, cycle_data = wait_for_bite(detector, sct, running, logger)
             
             if not bite_found:
                 print("  [QUIT] Detection stopped.")
                 break
             
-            # Step 5: Reel in and reset camera during animation
-            reel_in(RESET_DELAY_AFTER_REEL, RESET_UP_DURATION, RESET_UP_SPEED, REEL_DURATION)
-            
-            print(f"  [DONE] Cycle #{cycle_count} complete!")
+            if cycle_data is not None and cycle_data['status'] == 'complete':
+                reel_in(RESET_DELAY_AFTER_REEL, RESET_UP_DURATION, RESET_UP_SPEED, REEL_DURATION)
+                print(f"  [DONE] Cycle #{cycle_count} complete! (catch in {cycle_data['catch_time']:.1f}s)")
+            else:
+                reel_in(0, RESET_UP_DURATION, RESET_UP_SPEED, 1.0)
+                print(f"  [DONE] Cycle #{cycle_count} timed out after {CATCH_TIMEOUT}s")
 
     except KeyboardInterrupt:
         print("\n\nBot interrupted by user.")
     finally:
+        logger.print_summary()
         listener.stop()
         if DISPLAY_WINDOW:
             cv2.destroyAllWindows()
