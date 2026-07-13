@@ -16,7 +16,7 @@ VAR_THRESHOLD = 16
 
 BASELINE_WINDOW_SEC = 2.0
 SPIKE_Z_THRESH = 3.5        # raised from 3.0 - fewer marginal triggers
-MIN_SPIKE_SEC = 0.1         # raised from 0.08 - real bites sustain much
+MIN_SPIKE_SEC = 0.2         # raised from 0.08 - real bites sustain much
                              # longer than a partial bob; this is the main
                              # fix for "too sensitive to slight bobs"
 COOLDOWN_SEC = 3.0

@@ -10,12 +10,12 @@ INPUT_DIR = "./data"
 OUTPUT_DIR = "./data/output/edge_detection_detector"
 
 CROP_SIZE = 200
-BLUR_KERNEL = 6             # raised from 5 - suppresses noise when bob is
+BLUR_KERNEL = 7             # raised from 5 - suppresses noise when bob is
                              # close/large and edges get cluttered
 CANNY_LOW = 50
 CANNY_HIGH = 150
-OPEN_KERNEL = 2              # NEW - strips small noise specks before closing
-CLOSE_KERNEL = 4             # bridges gaps where ripples break the outline
+OPEN_KERNEL = 3              # NEW - strips small noise specks before closing
+CLOSE_KERNEL = 5             # bridges gaps where ripples break the outline
 
 MIN_ASPECT = 0.6
 MAX_ASPECT = 1.6
