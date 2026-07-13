@@ -3,8 +3,8 @@ import mss
 import numpy as np
 import cv2
 from pynput.keyboard import Key, Controller as KeyboardController
-from bite_detector import BiteDetector
-from controls import look_down_camera, cast_line, reel_in
+from lib.bite_detector import BiteDetector
+from lib.controls import look_down_camera, cast_line, reel_in
 
 # ============================================================
 #  CONFIGURATION
