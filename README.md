@@ -3,6 +3,15 @@
 
 This program uses computer vision to automatically fish in NieR:Automata. It is completely standalone and will work without needing to modify game volume, sound, or graphics as other autofishers tend to require.
 
+## Quickstart
+As a requirement, you must have some sort of Python 3 locally.
+1. Clone repository and install dependencies from `requirements.txt`.
+2. Run `python -u app.py` and start Nier:Automata (order doesnt matter).
+3. Get to a fishing spot in game, and enter fishing mode (hold E on PC).
+4. Without moving the camera, press the F1 key to start autofishing.
+
+> Note: The autofisher is CV based, do not move the camera while it is autofishing. If you do reset your fishing position and press F1 again.
+
 ## Models
 There are various models available for usage but the highest performance one is using `bg_subtract` which utilizes the diffeences in the background and foreground frames and calculates based on spikes of pixel activity within the region of interest (ROI). If you are interested in testing any models locally, take a video of you fishing and move them into the data folder as `input1.mp4`, `input2.mp4`, etc. From there you can install dependencies and run from project root:
 ```bash
