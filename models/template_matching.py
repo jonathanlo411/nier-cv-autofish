@@ -11,8 +11,8 @@ OUTPUT_DIR = "./data/output/template_matching"
 CROP_SIZE = 200
 TEMPLATE_SIZE = 50          # size of the bob template patch, in pixels
 IDLE_TIMESTAMP_SEC = 1.0    # assumed idle moment to grab the template from
-                            # ADJUST if the bob isn't idle/visible at this
-                            # time in a given clip
+# ADJUST if the bob isn't idle/visible at this
+# time in a given clip
 
 
 def process_video(path):
@@ -68,14 +68,15 @@ def process_video(path):
             _, max_val, _, max_loc = cv2.minMaxLoc(result)
             time_s = frame_idx / fps
 
-            csv_writer.writerow([frame_idx, time_s, max_val, max_loc[0], max_loc[1]])
+            csv_writer.writerow(
+                [frame_idx, time_s, max_val, max_loc[0], max_loc[1]])
             t.append(time_s)
             scores.append(max_val)
 
             match_x, match_y = max_loc[0] + x, max_loc[1] + y
             cv2.rectangle(vis, (match_x, match_y),
-                           (match_x + TEMPLATE_SIZE, match_y + TEMPLATE_SIZE),
-                           (0, 255, 0), 2)
+                          (match_x + TEMPLATE_SIZE, match_y + TEMPLATE_SIZE),
+                          (0, 255, 0), 2)
             cv2.putText(vis, f"match_score={max_val:.2f}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
@@ -98,7 +99,11 @@ def process_video(path):
     if scores:
         plt.figure(figsize=(12, 4))
         plt.plot(t, scores)
-        plt.axvline(x=IDLE_TIMESTAMP_SEC, color="gray", linestyle="--", label="template source")
+        plt.axvline(
+            x=IDLE_TIMESTAMP_SEC,
+            color="gray",
+            linestyle="--",
+            label="template source")
         plt.xlabel("Time (s)")
         plt.ylabel("Match score (normalized correlation)")
         plt.legend()
@@ -110,7 +115,7 @@ def process_video(path):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     videos = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
-                      if f.lower().endswith(".mp4")])
+                     if f.lower().endswith(".mp4")])
     for v in videos:
         process_video(v)
 

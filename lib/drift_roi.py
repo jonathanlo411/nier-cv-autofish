@@ -43,7 +43,12 @@ class OpticalFlowDriftEstimator:
       high capture frame rates.
     """
 
-    def __init__(self, downscale=0.5, ema_alpha=0.2, min_samples=10, max_px_per_sec=120.0):
+    def __init__(
+            self,
+            downscale=0.5,
+            ema_alpha=0.2,
+            min_samples=10,
+            max_px_per_sec=120.0):
         self.downscale = downscale
         self.ema_alpha = ema_alpha
         self.min_samples = min_samples
@@ -66,7 +71,11 @@ class OpticalFlowDriftEstimator:
 
     def update(self, frame_bgr, timestamp):
         """Feed one frame in. Safe to call less than every frame (see frame_stride)."""
-        small = cv2.resize(frame_bgr, None, fx=self.downscale, fy=self.downscale)
+        small = cv2.resize(
+            frame_bgr,
+            None,
+            fx=self.downscale,
+            fy=self.downscale)
         gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
 
         if self._prev_gray is None:
@@ -121,7 +130,10 @@ class DriftingROI:
     background model from seeing a shift as a foreground spike.
     """
 
-    def __init__(self, base_monitor, drift_px_per_sec=(0.0, 0.0), max_shift_px=(0, 0), max_step_px=1):
+    def __init__(
+        self, base_monitor, drift_px_per_sec=(
+            0.0, 0.0), max_shift_px=(
+            0, 0), max_step_px=1):
         self.base_monitor = dict(base_monitor)
         self.drift_x, self.drift_y = drift_px_per_sec
         self.max_shift_x, self.max_shift_y = max_shift_px
@@ -181,16 +193,20 @@ class DriftingROI:
         step_y = max(-self.max_step_px, min(self.max_step_px, raw_step_y))
 
         if step_x:
-            self._offset_x = max(-self.max_shift_x, min(self.max_shift_x, self._offset_x + step_x))
+            self._offset_x = max(-self.max_shift_x,
+                                 min(self.max_shift_x, self._offset_x + step_x))
         if step_y:
-            self._offset_y = max(-self.max_shift_y, min(self.max_shift_y, self._offset_y + step_y))
+            self._offset_y = max(-self.max_shift_y,
+                                 min(self.max_shift_y, self._offset_y + step_y))
 
         # Drain the accumulator by the RAW step (not the clamped one) so
         # slow drift still accumulates fractional progress normally, but
         # cap the leftover so a sustained fast current can't build up an
         # ever-growing backlog that eventually forces a big jump.
-        self._accum_x = max(-self.max_step_px, min(self.max_step_px, self._accum_x - raw_step_x))
-        self._accum_y = max(-self.max_step_px, min(self.max_step_px, self._accum_y - raw_step_y))
+        self._accum_x = max(-self.max_step_px,
+                            min(self.max_step_px, self._accum_x - raw_step_x))
+        self._accum_y = max(-self.max_step_px,
+                            min(self.max_step_px, self._accum_y - raw_step_y))
 
         region = dict(self.base_monitor)
         region["left"] += self._offset_x
