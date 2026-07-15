@@ -1,10 +1,11 @@
+import argparse
 import time
 import mss
 import numpy as np
 import cv2
 from pynput.keyboard import Key
 from lib.bite_detector import BiteDetector
-from lib.controls import look_down_camera, cast_line, reel_in, reset_camera_up
+from lib.controls import look_down_camera, cast_line, reel_in, reset_camera_up, recover_from_failed_fishing
 from lib.logging import FishingLogger
 from lib.drift_roi import DriftingROI, OpticalFlowDriftEstimator
 
@@ -65,18 +66,19 @@ MONITOR, SCALE_X, SCALE_Y = get_scaled_monitor()
 # stretched independently on each axis.
 SCALE_AVG = (SCALE_X + SCALE_Y) / 2
 
-LOOK_DOWN_DURATION = 0.5
-LOOK_DOWN_SPEED = 250
+LOOK_CAMERA_DURATION = 0.5
+LOOK_CAMERA_SPEED = 250
 WAIT_AFTER_CAMERA = 0.3
 WAIT_AFTER_CAST = 1.5
-RESET_UP_DURATION = 0.5
-RESET_UP_SPEED = 250
 RESET_DELAY_AFTER_REEL = 0.5
 REEL_DURATION = 10.0
 CROP_SIZE = int(200 * SCALE_AVG)
 FPS_TARGET = 120
 DISPLAY_WINDOW = True
 CATCH_TIMEOUT = 45.0
+MAX_CONSECUTIVE_TIMEOUTS = 3
+RECOVERY_WAIT_BEFORE_HOLD = 5.0
+RECOVERY_HOLD_DURATION = 3.0
 
 DETECTOR_PARAMS = {
     "crop_size": CROP_SIZE,
@@ -103,8 +105,8 @@ DRIFT_MIN_SAMPLES = 3             # frames of flow before trusting a nonzero est
 DRIFT_MAX_PX_PER_SEC = 300.0      # safety cap on how fast the ROI is allowed to chase
 DRIFT_FRAME_STRIDE = 1            # feed every frame into the flow estimator (was every 2nd)
 
-# Build config dict for logger
-CONFIG = {
+# Build default config dict for logger
+DEFAULT_CONFIG = {
     "monitor_width": MONITOR["width"],
     "monitor_height": MONITOR["height"],
     "monitor_left": MONITOR["left"],
@@ -118,10 +120,10 @@ CONFIG = {
     "history": DETECTOR_PARAMS["history"],
     "var_threshold": DETECTOR_PARAMS["var_threshold"],
     "catch_timeout": CATCH_TIMEOUT,
-    "look_down_duration": LOOK_DOWN_DURATION,
-    "look_down_speed": LOOK_DOWN_SPEED,
-    "reset_up_duration": RESET_UP_DURATION,
-    "reset_up_speed": RESET_UP_SPEED,
+    "look_camera_duration": LOOK_CAMERA_DURATION,
+    "look_camera_speed": LOOK_CAMERA_SPEED,
+    "reset_camera_duration": LOOK_CAMERA_DURATION,
+    "reset_camera_speed": LOOK_CAMERA_SPEED,
     "drift_enabled": DRIFT_ENABLED,
     "drift_max_shift_px": DRIFT_MAX_SHIFT_PX,
 }
@@ -139,7 +141,23 @@ def start_detector():
     return detector
 
 
-def wait_for_bite(detector, sct, running_flag, logger, drift, estimator):
+def parse_args():
+    parser = argparse.ArgumentParser(description="Nier Automata fishing bot")
+    parser.add_argument(
+        "--camera-speed",
+        type=int,
+        default=LOOK_CAMERA_SPEED,
+        help="Mouse movement speed for both look-down and camera reset",
+    )
+    parser.add_argument(
+        "--static-model",
+        action="store_true",
+        help="Run in static ROI mode without drift compensation",
+    )
+    return parser.parse_args()
+
+
+def wait_for_bite(detector, sct, running_flag, logger, drift, estimator, drift_enabled):
     """Step 4: Monitor for a bite with timeout."""
     print("  [DETECTOR] Waiting for bite...")
 
@@ -168,7 +186,7 @@ def wait_for_bite(detector, sct, running_flag, logger, drift, estimator):
         
         # Capture screen - region may be shifted from MONITOR if drift
         # compensation has picked up a nonzero current estimate.
-        region = drift.get_region() if DRIFT_ENABLED else MONITOR
+        region = drift.get_region() if drift_enabled else MONITOR
         img = np.array(sct.grab(region))
         frame = img[:, :, :3]
 
@@ -179,7 +197,7 @@ def wait_for_bite(detector, sct, running_flag, logger, drift, estimator):
         # Feed the drift estimator every Nth frame (Farneback isn't free,
         # and the current direction doesn't change fast enough to need
         # every single frame).
-        if DRIFT_ENABLED and frame_count % DRIFT_FRAME_STRIDE == 0:
+        if drift_enabled and frame_count % DRIFT_FRAME_STRIDE == 0:
             estimator.update(frame, now)
             drift.set_velocity(estimator.get_drift_px_per_sec())
         
@@ -192,8 +210,8 @@ def wait_for_bite(detector, sct, running_flag, logger, drift, estimator):
             z = detector.last_z
             z_str = f"{z:.1f}" if z is not None else "n/a"
             remaining = CATCH_TIMEOUT - elapsed_total
-            drift_dx, drift_dy = estimator.get_drift_px_per_sec() if DRIFT_ENABLED else (0.0, 0.0)
-            off_x, off_y = drift.get_offset() if DRIFT_ENABLED else (0, 0)
+            drift_dx, drift_dy = estimator.get_drift_px_per_sec() if drift_enabled else (0.0, 0.0)
+            off_x, off_y = drift.get_offset() if drift_enabled else (0, 0)
             print(f"    [WAITING] frame={frame_count} fg={detector.last_fg_count} z={z_str} "
                   f"state={state} timeout={remaining:.0f}s "
                   f"drift=({drift_dx:.1f},{drift_dy:.1f})px/s offset=({off_x},{off_y})")
@@ -230,7 +248,7 @@ def wait_for_bite(detector, sct, running_flag, logger, drift, estimator):
             cv2.putText(vis, f"Catches: {logger.total_catches} | Timeout: {CATCH_TIMEOUT - elapsed_total:.0f}s",
                         (15, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
 
-            if DRIFT_ENABLED:
+            if drift_enabled:
                 drift_dx, drift_dy = estimator.get_drift_px_per_sec()
                 off_x, off_y = drift.get_offset()
                 cv2.putText(vis, f"Drift: ({drift_dx:.1f},{drift_dy:.1f})px/s  Offset: ({off_x},{off_y})",
@@ -273,20 +291,31 @@ def wait_for_bite(detector, sct, running_flag, logger, drift, estimator):
 # ============================================================
 
 def main():
+    args = parse_args()
+    look_camera_speed = args.camera_speed
+    drift_enabled = not args.static_model
+
     print("=" * 60)
     print("  Nier: Automata Fishing Bot")
     print("=" * 60)
     print(f"  Monitor: {MONITOR['width']}x{MONITOR['height']} at ({MONITOR['left']},{MONITOR['top']})")
     print(f"  FPS Target: {FPS_TARGET}")
     print(f"  Crop: {CROP_SIZE}px | Timeout: {CATCH_TIMEOUT}s")
-    print(f"  Drift compensation: {'ON' if DRIFT_ENABLED else 'OFF'} "
+    print(f"  Camera speed: {look_camera_speed}")
+    print(f"  Drift compensation: {'ON' if drift_enabled else 'OFF'} "
           f"(max shift: {DRIFT_MAX_SHIFT_PX}px)")
     print(f"  Log: logs/autofishing-<datetime>.log")
     print("=" * 60)
 
     sct = mss.mss()
     running = [False]
-    logger = FishingLogger(CONFIG)
+    config = DEFAULT_CONFIG.copy()
+    config["look_camera_speed"] = look_camera_speed
+    config["drift_enabled"] = drift_enabled
+    logger = FishingLogger(config)
+
+    cycle_count = 0
+    consecutive_timeouts = 0
 
     # Created once and reset per-cycle inside wait_for_bite, rather than
     # recreated each cast, to avoid the small overhead of reallocating
@@ -333,24 +362,35 @@ def main():
             print(f"  FISHING CYCLE #{cycle_count}")
             print(f"{'='*60}")
             
-            look_down_camera(LOOK_DOWN_DURATION, LOOK_DOWN_SPEED, WAIT_AFTER_CAMERA)
+            look_down_camera(LOOK_CAMERA_DURATION, look_camera_speed, WAIT_AFTER_CAMERA)
             cast_line(WAIT_AFTER_CAST)
             
             detector = start_detector()
             logger.start_cycle()
             
-            bite_found, cycle_data = wait_for_bite(detector, sct, running, logger, drift, estimator)
+            bite_found, cycle_data = wait_for_bite(detector, sct, running, logger, drift, estimator, drift_enabled)
             
             if not bite_found:
                 print("  [QUIT] Detection stopped.")
                 break
             
             if cycle_data is not None and cycle_data['status'] == 'complete':
-                reel_in(RESET_DELAY_AFTER_REEL, RESET_UP_DURATION, RESET_UP_SPEED, REEL_DURATION)
+                reel_in(RESET_DELAY_AFTER_REEL, LOOK_CAMERA_DURATION, look_camera_speed, REEL_DURATION)
                 print(f"  [DONE] Cycle #{cycle_count} complete! (catch in {cycle_data['catch_time']:.1f}s)")
+                consecutive_timeouts = 0
             else:
-                reel_in(0, RESET_UP_DURATION, RESET_UP_SPEED, 1.0)
+                reel_in(0, LOOK_CAMERA_DURATION, look_camera_speed, 1.0)
                 print(f"  [DONE] Cycle #{cycle_count} timed out after {CATCH_TIMEOUT}s")
+
+                consecutive_timeouts += 1
+                print(f"  [WARN] Consecutive timeouts: {consecutive_timeouts}/{MAX_CONSECUTIVE_TIMEOUTS}")
+
+                if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
+                    recover_from_failed_fishing(
+                        wait_before_hold=RECOVERY_WAIT_BEFORE_HOLD,
+                        hold_duration=RECOVERY_HOLD_DURATION,
+                    )
+                    consecutive_timeouts = 0
 
     except KeyboardInterrupt:
         print("\n\nBot interrupted by user.")
