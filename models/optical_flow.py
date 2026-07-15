@@ -2,8 +2,8 @@ import csv
 import os
 
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from tqdm import tqdm
 
 INPUT_DIR = "./data"
@@ -68,8 +68,17 @@ def process_video(path):
             mean_mags.append(mean_mag)
             max_mags.append(max_mag)
 
-            cv2.putText(vis, f"mean_flow={mean_mag:.2f} max={max_mag:.1f}",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(
+                vis,
+                f"mean_flow={mean_mag:.2f} max={max_mag:.1f}",
+                (10,
+                 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0,
+                 0,
+                 255),
+                2)
 
             # Standard flow visualization: hue = direction, value = magnitude
             hsv = np.zeros_like(crop)
@@ -112,7 +121,7 @@ def process_video(path):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     videos = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
-                      if f.lower().endswith(".mp4")])
+                     if f.lower().endswith(".mp4")])
     for v in videos:
         process_video(v)
 

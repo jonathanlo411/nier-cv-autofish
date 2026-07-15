@@ -1,7 +1,7 @@
+from collections import deque
 import csv
 import os
 import statistics
-from collections import deque
 
 import cv2
 import matplotlib.pyplot as plt
@@ -17,8 +17,8 @@ VAR_THRESHOLD = 16
 BASELINE_WINDOW_SEC = 2.0
 SPIKE_Z_THRESH = 3.5        # raised from 3.0 - fewer marginal triggers
 MIN_SPIKE_SEC = 0.2         # raised from 0.08 - real bites sustain much
-                             # longer than a partial bob; this is the main
-                             # fix for "too sensitive to slight bobs"
+# longer than a partial bob; this is the main
+# fix for "too sensitive to slight bobs"
 COOLDOWN_SEC = 3.0
 
 
@@ -100,7 +100,8 @@ def process_video(path):
                         spike_counter = 0
                         banner_until_frame = frame_idx + int(fps)
                         triggers.append((time_s, z))
-                        print(f"[bg_subtraction] BITE at t={time_s:.2f}s (z={z:.1f})")
+                        print(
+                            f"[bg_subtraction] BITE at t={time_s:.2f}s (z={z:.1f})")
 
                 baseline.append(fg_count)
             else:
@@ -110,7 +111,8 @@ def process_video(path):
                     spike_counter = 0
                     baseline.clear()
 
-        csv_writer.writerow([frame_idx, time_s, fg_count, "" if z is None else z, state])
+        csv_writer.writerow([frame_idx, time_s, fg_count,
+                            "" if z is None else z, state])
         t_all.append(time_s)
         fg_all.append(fg_count)
         z_all.append(z if z is not None else 0)
@@ -123,7 +125,11 @@ def process_video(path):
         if frame_idx < banner_until_frame:
             cv2.putText(vis, "BITE DETECTED!", (10, 80),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-            cv2.imwrite(os.path.join(outdir, f"trigger_{time_s:.2f}s.png"), vis)
+            cv2.imwrite(
+                os.path.join(
+                    outdir,
+                    f"trigger_{time_s:.2f}s.png"),
+                vis)
 
         mask_bgr = cv2.cvtColor(fg_mask, cv2.COLOR_GRAY2BGR)
         mask_bgr = cv2.resize(mask_bgr, (fw, fh))
@@ -163,8 +169,9 @@ def process_video(path):
     # log.txt
     with open(os.path.join(outdir, "log.txt"), "w") as f:
         f.write(f"bg_subtraction detections for {name}\n")
-        f.write(f"params: SPIKE_Z_THRESH={SPIKE_Z_THRESH} MIN_SPIKE_SEC={MIN_SPIKE_SEC} "
-                f"BASELINE_WINDOW_SEC={BASELINE_WINDOW_SEC} COOLDOWN_SEC={COOLDOWN_SEC}\n\n")
+        f.write(
+            f"params: SPIKE_Z_THRESH={SPIKE_Z_THRESH} MIN_SPIKE_SEC={MIN_SPIKE_SEC} "
+            f"BASELINE_WINDOW_SEC={BASELINE_WINDOW_SEC} COOLDOWN_SEC={COOLDOWN_SEC}\n\n")
         if not triggers:
             f.write("No bites detected.\n")
         for ts, z in triggers:
@@ -176,7 +183,7 @@ def process_video(path):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     videos = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
-                      if f.lower().endswith(".mp4")])
+                     if f.lower().endswith(".mp4")])
     for v in videos:
         process_video(v)
 

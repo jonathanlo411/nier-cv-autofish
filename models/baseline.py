@@ -1,8 +1,8 @@
 # script.py
+from collections import deque
 import csv
 import os
 import statistics
-from collections import deque
 
 import cv2
 import matplotlib.pyplot as plt
@@ -51,7 +51,8 @@ def process_video(path):
     csv_path = os.path.join(outdir, "metrics.csv")
     csv_file = open(csv_path, "w", newline="")
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["frame","time","changed_pixels","motion_sum","motion_mean","z"])
+    csv_writer.writerow(["frame", "time", "changed_pixels",
+                        "motion_sum", "motion_mean", "z"])
 
     t = []
     motion = []
@@ -67,14 +68,14 @@ def process_video(path):
 
         if roi is None:
             fh, fw = frame.shape[:2]
-            x = (fw - CROP_SIZE)//2
-            y = (fh - CROP_SIZE)//2
-            roi = (x,y,CROP_SIZE,CROP_SIZE)
+            x = (fw - CROP_SIZE) // 2
+            y = (fh - CROP_SIZE) // 2
+            roi = (x, y, CROP_SIZE, CROP_SIZE)
 
-        x,y,w,h = roi
-        crop = frame[y:y+h,x:x+w]
+        x, y, w, h = roi
+        crop = frame[y:y + h, x:x + w]
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-        blur = cv2.GaussianBlur(gray,(5,5),0)
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
         if prev is None:
             prev = blur
@@ -83,8 +84,8 @@ def process_video(path):
             continue
 
         diff = cv2.absdiff(prev, blur)
-        diff = cv2.GaussianBlur(diff,(5,5),0)
-        _, mask = cv2.threshold(diff, DIFF_THRESHOLD,255,cv2.THRESH_BINARY)
+        diff = cv2.GaussianBlur(diff, (5, 5), 0)
+        _, mask = cv2.threshold(diff, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
 
         changed = cv2.countNonZero(mask)
         motion_sum = int(diff.sum())
@@ -93,46 +94,52 @@ def process_video(path):
 
         z = None
         if state == "idle":
-            if len(baseline) > max(5, baseline.maxlen//3):
+            if len(baseline) > max(5, baseline.maxlen // 3):
                 mean = statistics.mean(baseline)
                 std = statistics.pstdev(baseline) or 1.0
-                z = (changed-mean)/std
+                z = (changed - mean) / std
                 if z > SPIKE_Z_THRESH:
                     spike += 1
                 else:
                     spike = 0
                 if spike >= min_spike:
-                    print(f"BITE DETECTED {name}: {frame_idx/fps:.2f}s z={z:.2f}")
-                    state="triggered"
-                    cooldown=0
-                    spike=0
+                    print(
+                        f"BITE DETECTED {name}: {frame_idx/fps:.2f}s z={z:.2f}")
+                    state = "triggered"
+                    cooldown = 0
+                    spike = 0
             baseline.append(changed)
         else:
             cooldown += 1
             if cooldown >= cooldown_frames:
-                state="idle"
+                state = "idle"
                 baseline.clear()
 
-        csv_writer.writerow([frame_idx,frame_idx/fps,changed,motion_sum,motion_mean,"" if z is None else z])
-        t.append(frame_idx/fps)
+        csv_writer.writerow([frame_idx,
+                             frame_idx / fps,
+                             changed,
+                             motion_sum,
+                             motion_mean,
+                             "" if z is None else z])
+        t.append(frame_idx / fps)
         motion.append(changed)
         zhist.append(0 if z is None else z)
 
         vis = frame.copy()
-        cv2.rectangle(vis,(x,y),(x+w,y+h),(255,0,0),1)
-        cv2.putText(vis,f"motion={changed} z={z if z is not None else 'n/a'}",
-                    (10,30),cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
+        cv2.rectangle(vis, (x, y), (x + w, y + h), (255, 0, 0), 1)
+        cv2.putText(vis, f"motion={changed} z={z if z is not None else 'n/a'}",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-        mask_bgr = cv2.cvtColor(mask,cv2.COLOR_GRAY2BGR)
-        mask_bgr = cv2.resize(mask_bgr,(fw,fh))
-        combo = cv2.hconcat([vis,mask_bgr])
+        mask_bgr = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+        mask_bgr = cv2.resize(mask_bgr, (fw, fh))
+        combo = cv2.hconcat([vis, mask_bgr])
 
         if writer is None:
             writer = cv2.VideoWriter(
-                os.path.join(outdir,"detection.mp4"),
+                os.path.join(outdir, "detection.mp4"),
                 cv2.VideoWriter_fourcc(*"mp4v"),
                 fps,
-                (fw*2,fh)
+                (fw * 2, fh)
             )
         writer.write(combo)
 
@@ -145,26 +152,26 @@ def process_video(path):
     if writer:
         writer.release()
 
-    plt.figure(figsize=(10,4))
-    plt.plot(t,motion)
+    plt.figure(figsize=(10, 4))
+    plt.plot(t, motion)
     plt.xlabel("Time (s)")
     plt.ylabel("Changed Pixels")
     plt.tight_layout()
-    plt.savefig(os.path.join(outdir,"motion.png"))
+    plt.savefig(os.path.join(outdir, "motion.png"))
     plt.close()
 
-    plt.figure(figsize=(10,4))
-    plt.plot(t,zhist)
+    plt.figure(figsize=(10, 4))
+    plt.plot(t, zhist)
     plt.xlabel("Time (s)")
     plt.ylabel("Z Score")
     plt.tight_layout()
-    plt.savefig(os.path.join(outdir,"zscore.png"))
+    plt.savefig(os.path.join(outdir, "zscore.png"))
     plt.close()
 
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    videos = sorted([os.path.join(INPUT_DIR,f) for f in os.listdir(INPUT_DIR)
+    videos = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
                      if f.lower().endswith(".mp4")])
     for v in videos:
         process_video(v)

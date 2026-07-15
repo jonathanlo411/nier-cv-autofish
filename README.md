@@ -21,6 +21,8 @@ The capture region is automatically centered on your monitor, so no manual coord
 | --- | --- | --- |
 | `--monitor-index` | `1` | Which monitor to capture from (`mss` indexing: `0` = all monitors combined, `1` = primary, `2` = secondary, etc). Use this if the game is running on a secondary display. |
 | `--no-display` | off (window shown) | Disables the live preview/classifier popup window. Useful if you don't need the visual overlay or want to save on resources. |
+| `--camera-speed` | `250` | Mouse movement speed for both the look-down and camera reset motions. Higher values move the camera faster. Used for higher elevation fishing points. |
+| `--static-model` | off | Disable drift compensation and use a fixed ROI for detection instead of the drift model. |
 
 ```bash
 # Default: primary monitor, preview window shown
@@ -31,6 +33,15 @@ python -u app.py --monitor-index 2
 
 # Run without the preview window
 python -u app.py --no-display
+
+# Increase the camera movement speed for look-down/reset actions
+python -u app.py --camera-speed 300
+
+# Run without the drift model (static ROI)
+python -u app.py --static-model
+
+# Use a static ROI and faster camera movement
+python -u app.py --static-model --camera-speed 180
 ```
 
 ## Models
