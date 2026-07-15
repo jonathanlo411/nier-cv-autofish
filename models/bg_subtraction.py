@@ -91,7 +91,11 @@ def process_video(path):
 
     plt.figure(figsize=(12, 4))
     plt.plot(t, fg_counts)
-    plt.axvline(x=HISTORY / fps, color="gray", linestyle="--", label="warm-up ends")
+    plt.axvline(
+        x=HISTORY / fps,
+        color="gray",
+        linestyle="--",
+        label="warm-up ends")
     plt.xlabel("Time (s)")
     plt.ylabel("Foreground pixels")
     plt.legend()
@@ -103,7 +107,7 @@ def process_video(path):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     videos = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
-                      if f.lower().endswith(".mp4")])
+                     if f.lower().endswith(".mp4")])
     for v in videos:
         process_video(v)
 

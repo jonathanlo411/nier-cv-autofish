@@ -1,13 +1,16 @@
-import time
 from collections import deque
 import statistics
+import time
+
 import cv2
+
 
 class BiteDetector:
     """
     Real‑time bite detector using MOG2 background subtraction and
     rolling z‑score thresholding. Matches the original offline logic exactly.
     """
+
     def __init__(self, crop_size=200, history=300, var_threshold=16,
                  baseline_window_sec=2.0, spike_z_thresh=3.5,
                  min_spike_sec=0.2, cooldown_sec=3.0, border_margin=0):
@@ -50,7 +53,7 @@ class BiteDetector:
             y = (fh - self.crop_size) // 2
             self.roi = (x, y, self.crop_size, self.crop_size)
         x, y, w, h = self.roi
-        return frame[y:y+h, x:x+w]
+        return frame[y:y + h, x:x + w]
 
     def process_frame(self, frame_bgr, timestamp=None):
         """
@@ -90,7 +93,8 @@ class BiteDetector:
         if self.state == "warmup":
             self.baseline.append((timestamp, fg_count))
             # Original: past_warmup = frame_idx > HISTORY
-            # We need enough frames for both the subtractor AND baseline statistics
+            # We need enough frames for both the subtractor AND baseline
+            # statistics
             if len(self.baseline) >= self.history:
                 self.state = "idle"
             self.last_fg_count = fg_count
@@ -109,21 +113,25 @@ class BiteDetector:
             return False
 
         # --- IDLE / SPIKE MONITORING ---
-        # Maintain rolling baseline window (matches original baseline_window_frames)
+        # Maintain rolling baseline window (matches original
+        # baseline_window_frames)
         self.baseline.append((timestamp, fg_count))
         cutoff = timestamp - self.baseline_window_sec
         while self.baseline and self.baseline[0][0] < cutoff:
             self.baseline.popleft()
 
-        # Need enough data (original: len(baseline) >= max(5, baseline_window_frames // 3))
-        min_samples = max(5, int(self.baseline_window_sec * 30) // 3)  # ~30fps estimate
+        # Need enough data (original: len(baseline) >= max(5,
+        # baseline_window_frames // 3))
+        # ~30fps estimate
+        min_samples = max(5, int(self.baseline_window_sec * 30) // 3)
         if len(self.baseline) < min_samples:
             self.last_fg_count = fg_count
             self.last_z = None
             self.last_state = self.state
             return False
 
-        # Compute z-score (matches original: statistics.mean, statistics.pstdev)
+        # Compute z-score (matches original: statistics.mean,
+        # statistics.pstdev)
         fg_values = [v for _, v in self.baseline]
         mean = statistics.mean(fg_values)
         std = statistics.pstdev(fg_values) or 1.0

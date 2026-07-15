@@ -11,7 +11,7 @@ OUTPUT_DIR = "./data/output/edge_detection_detector"
 
 CROP_SIZE = 200
 BLUR_KERNEL = 7             # raised from 5 - suppresses noise when bob is
-                             # close/large and edges get cluttered
+# close/large and edges get cluttered
 CANNY_LOW = 50
 CANNY_HIGH = 150
 OPEN_KERNEL = 3              # NEW - strips small noise specks before closing
@@ -33,7 +33,8 @@ FOUND_STREAK_CAP_SEC = 2.0    # cap so it doesn't take forever to decay
 
 
 def find_bob_candidate(edges_closed, roi_size):
-    contours, _ = cv2.findContours(edges_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(
+        edges_closed, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     roi_area = roi_size * roi_size
     center = roi_size / 2
 
@@ -81,8 +82,10 @@ def process_video(path):
     cooldown_frames = int(fps * COOLDOWN_SEC)
     found_streak_cap = int(fps * FOUND_STREAK_CAP_SEC)
 
-    open_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (OPEN_KERNEL, OPEN_KERNEL))
-    close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (CLOSE_KERNEL, CLOSE_KERNEL))
+    open_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (OPEN_KERNEL, OPEN_KERNEL))
+    close_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (CLOSE_KERNEL, CLOSE_KERNEL))
 
     found_streak = 0     # leaky - grows on found, decays (not resets) on miss
     absent_streak = 0    # hard reset - must be a clean run of misses
@@ -100,8 +103,13 @@ def process_video(path):
     csv_path = os.path.join(outdir, "metrics.csv")
     csv_file = open(csv_path, "w", newline="")
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["frame", "time", "found", "found_streak", "absent_streak",
-                          "established", "state"])
+    csv_writer.writerow(["frame",
+                         "time",
+                         "found",
+                         "found_streak",
+                         "absent_streak",
+                         "established",
+                         "state"])
 
     pbar = tqdm(total=frames, desc=name)
     frame_idx = 0
@@ -151,7 +159,8 @@ def process_video(path):
                 found_streak = 0
                 banner_until_frame = frame_idx + int(fps)
                 triggers.append((time_s, absent_streak))
-                print(f"[edge_detection] BITE at t={time_s:.2f}s (absent {absent_streak} frames)")
+                print(
+                    f"[edge_detection] BITE at t={time_s:.2f}s (absent {absent_streak} frames)")
         else:
             cooldown_counter += 1
             if cooldown_counter >= cooldown_frames:
@@ -160,7 +169,7 @@ def process_video(path):
                 absent_streak = 0
 
         csv_writer.writerow([frame_idx, time_s, found, found_streak, absent_streak,
-                              established, state])
+                             established, state])
         t_all.append(time_s)
         found_all.append(1 if found else 0)
 
@@ -169,13 +178,27 @@ def process_video(path):
         if candidate:
             cx, cy, cw, ch = candidate
             # Bright, thick highlight so it's easy to spot while scrubbing
-            cv2.rectangle(vis, (x + cx, y + cy), (x + cx + cw, y + cy + ch), (0, 255, 0), 3)
-        cv2.putText(vis, f"found={found} estab={established} state={state}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            cv2.rectangle(vis, (x + cx, y + cy),
+                          (x + cx + cw, y + cy + ch), (0, 255, 0), 3)
+        cv2.putText(
+            vis,
+            f"found={found} estab={established} state={state}",
+            (10,
+             30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0,
+             0,
+             255),
+            2)
         if frame_idx < banner_until_frame:
             cv2.putText(vis, "BITE DETECTED!", (10, 80),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-            cv2.imwrite(os.path.join(outdir, f"trigger_{time_s:.2f}s.png"), vis)
+            cv2.imwrite(
+                os.path.join(
+                    outdir,
+                    f"trigger_{time_s:.2f}s.png"),
+                vis)
 
         edges_bgr = cv2.cvtColor(edges_closed, cv2.COLOR_GRAY2BGR)
         edges_bgr = cv2.resize(edges_bgr, (fw, fh))
@@ -229,7 +252,7 @@ def process_video(path):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     videos = sorted([os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR)
-                      if f.lower().endswith(".mp4")])
+                     if f.lower().endswith(".mp4")])
     for v in videos:
         process_video(v)
 
