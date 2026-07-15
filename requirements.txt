@@ -10,6 +10,7 @@ numpy==2.0.2
 opencv-python==5.0.0.93
 packaging==26.2
 pillow==11.3.0
+evdev==1.9.3
 pynput==1.8.2
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
