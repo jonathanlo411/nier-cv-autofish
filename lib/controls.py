@@ -66,7 +66,8 @@ def press_escape():
     """Press and release ESCAPE using keybd_event."""
     ctypes.windll.user32.keybd_event(VK_ESCAPE, SCANCODE_ESCAPE, 0, 0)
     time.sleep(0.15)
-    ctypes.windll.user32.keybd_event(VK_ESCAPE, SCANCODE_ESCAPE, KEYEVENTF_KEYUP, 0)
+    ctypes.windll.user32.keybd_event(
+        VK_ESCAPE, SCANCODE_ESCAPE, KEYEVENTF_KEYUP, 0)
     time.sleep(0.05)
 
 
@@ -162,7 +163,7 @@ def reel_in(wait_before_reset, reset_duration, reset_speed, total_duration):
     if remaining > 0:
         print(f"  [INPUT] Waiting {remaining:.1f}s for animation to finish...")
         time.sleep(remaining)
-    
+
     print("  [INPUT] Reel sequence complete!")
 
 

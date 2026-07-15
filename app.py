@@ -7,8 +7,9 @@ import numpy as np
 from pynput.keyboard import Key
 
 from lib.bite_detector import BiteDetector
-from lib.controls import look_down_camera, cast_line, reel_in, reset_camera_up, recover_from_failed_fishing
-from lib.logging import FishingLogger
+from lib.controls import (cast_line, look_down_camera,
+                          recover_from_failed_fishing, reel_in,
+                          reset_camera_up)
 from lib.drift_roi import DriftingROI, OpticalFlowDriftEstimator
 from lib.logging import FishingLogger
 
@@ -168,7 +169,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def wait_for_bite(detector, sct, running_flag, logger, drift, estimator, drift_enabled):
+def wait_for_bite(
+        detector,
+        sct,
+        running_flag,
+        logger,
+        drift,
+        estimator,
+        drift_enabled):
     """Step 4: Monitor for a bite with timeout."""
     print("  [DETECTOR] Waiting for bite...")
 
@@ -224,10 +232,11 @@ def wait_for_bite(detector, sct, running_flag, logger, drift, estimator, drift_e
             remaining = CATCH_TIMEOUT - elapsed_total
             drift_dx, drift_dy = estimator.get_drift_px_per_sec() if drift_enabled else (0.0, 0.0)
             off_x, off_y = drift.get_offset() if drift_enabled else (0, 0)
-            print(f"    [WAITING] frame={frame_count} fg={detector.last_fg_count} z={z_str} "
-                  f"state={state} timeout={remaining:.0f}s "
-                  f"drift=({drift_dx:.1f},{drift_dy:.1f})px/s offset=({off_x},{off_y})")
-        
+            print(
+                f"    [WAITING] frame={frame_count} fg={detector.last_fg_count} z={z_str} "
+                f"state={state} timeout={remaining:.0f}s "
+                f"drift=({drift_dx:.1f},{drift_dy:.1f})px/s offset=({off_x},{off_y})")
+
         # Visual overlay
         if DISPLAY_WINDOW:
             vis = frame.copy()
@@ -424,29 +433,40 @@ def main():
             print(f"\n{'='*60}")
             print(f"  FISHING CYCLE #{cycle_count}")
             print(f"{'='*60}")
-            
-            look_down_camera(LOOK_CAMERA_DURATION, look_camera_speed, WAIT_AFTER_CAMERA)
+
+            look_down_camera(
+                LOOK_CAMERA_DURATION,
+                look_camera_speed,
+                WAIT_AFTER_CAMERA)
             cast_line(WAIT_AFTER_CAST)
 
             detector = start_detector()
             logger.start_cycle()
-            
-            bite_found, cycle_data = wait_for_bite(detector, sct, running, logger, drift, estimator, drift_enabled)
-            
+
+            bite_found, cycle_data = wait_for_bite(
+                detector, sct, running, logger, drift, estimator, drift_enabled)
+
             if not bite_found:
                 print("  [QUIT] Detection stopped.")
                 break
 
             if cycle_data is not None and cycle_data['status'] == 'complete':
-                reel_in(RESET_DELAY_AFTER_REEL, LOOK_CAMERA_DURATION, look_camera_speed, REEL_DURATION)
-                print(f"  [DONE] Cycle #{cycle_count} complete! (catch in {cycle_data['catch_time']:.1f}s)")
+                reel_in(
+                    RESET_DELAY_AFTER_REEL,
+                    LOOK_CAMERA_DURATION,
+                    look_camera_speed,
+                    REEL_DURATION)
+                print(
+                    f"  [DONE] Cycle #{cycle_count} complete! (catch in {cycle_data['catch_time']:.1f}s)")
                 consecutive_timeouts = 0
             else:
                 reel_in(0, LOOK_CAMERA_DURATION, look_camera_speed, 1.0)
-                print(f"  [DONE] Cycle #{cycle_count} timed out after {CATCH_TIMEOUT}s")
+                print(
+                    f"  [DONE] Cycle #{cycle_count} timed out after {CATCH_TIMEOUT}s")
 
                 consecutive_timeouts += 1
-                print(f"  [WARN] Consecutive timeouts: {consecutive_timeouts}/{MAX_CONSECUTIVE_TIMEOUTS}")
+                print(
+                    f"  [WARN] Consecutive timeouts: {consecutive_timeouts}/{MAX_CONSECUTIVE_TIMEOUTS}")
 
                 if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
                     recover_from_failed_fishing(
